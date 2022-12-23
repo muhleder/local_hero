@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -33,6 +35,8 @@ class LocalHeroController {
 
   Curve curve;
   RectTweenSupplier createRectTween;
+  Stream<AnimationStatus> get animationStatusStream => _animationStatusSteamController.stream;
+  final StreamController<AnimationStatus> _animationStatusSteamController = StreamController<AnimationStatus>();
 
   Duration? get duration => _controller.duration;
   set duration(Duration? value) {
@@ -49,6 +53,7 @@ class LocalHeroController {
   Size? get linkedSize => _animation?.value?.size ?? _lastRect?.size;
 
   void _onAnimationStatusChanged(AnimationStatus status) {
+    _animationStatusSteamController.add(status);
     if (status == AnimationStatus.completed) {
       _isAnimating = false;
       _animation = null;
@@ -108,13 +113,18 @@ class LocalHeroController {
     _lastRect = rect;
   }
 
+  final List<VoidCallback> _listeners = [];
+  final List<AnimationStatusListener> _animationStatusListeners = [];
+
   void dispose() {
+    _animationStatusSteamController.close();
     _controller.stop();
     _controller.removeStatusListener(_onAnimationStatusChanged);
     _controller.dispose();
   }
 
   void addListener(VoidCallback listener) {
+    _listeners.add(listener);
     _controller.addListener(listener);
   }
 
@@ -122,7 +132,15 @@ class LocalHeroController {
     _controller.removeListener(listener);
   }
 
+  void removeListeners() {
+    _listeners.forEach(removeListener);
+    _animationStatusListeners.forEach(removeStatusListener);
+    _listeners.clear();
+    _animationStatusListeners.clear();
+  }
+
   void addStatusListener(AnimationStatusListener listener) {
+    _animationStatusListeners.add(listener);
     _controller.addStatusListener(listener);
   }
 

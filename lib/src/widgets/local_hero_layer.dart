@@ -5,16 +5,27 @@ import 'package:local_hero/src/rendering/local_hero_layer.dart';
 // ignore_for_file: public_member_api_docs
 
 class LocalHeroFollower extends SingleChildRenderObjectWidget {
-  const LocalHeroFollower({
+  LocalHeroFollower({
     Key? key,
     required this.controller,
-    Widget? child,
+    Widget? from,
+    Widget? to,
+    required this.fromUsesFlightShuttleBuilder,
+    required this.toUsesFlightShuttleBuilder,
   }) : super(
           key: key,
-          child: child,
+          child: (fromUsesFlightShuttleBuilder && toUsesFlightShuttleBuilder && from != null && to != null)
+              ? Stack(children: [to, from])
+              : fromUsesFlightShuttleBuilder
+                  ? from
+                  : toUsesFlightShuttleBuilder
+                      ? to
+                      : from,
         );
 
   final LocalHeroController controller;
+  final bool fromUsesFlightShuttleBuilder;
+  final bool toUsesFlightShuttleBuilder;
 
   @override
   _LocalHeroFollowerElement createElement() {

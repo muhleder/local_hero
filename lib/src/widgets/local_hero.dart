@@ -11,7 +11,17 @@ typedef LocalHeroFlightShuttleBuilder = Widget Function(
   BuildContext context,
   Animation<double> animation,
   Widget child,
+  ShuttleType shuttleType,
 );
+
+/// Whether the shuttle is animating [to] or [from] the LocalHero widget.
+enum ShuttleType {
+  /// The shuttle is animating with this LocalHero as a starting point.
+  from,
+
+  /// The shuttle is animating with this LocalHero as an ending point.
+  to,
+}
 
 /// Mark its child as a candidate for local hero animation.
 ///

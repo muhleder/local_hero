@@ -48,10 +48,13 @@ class _LocalHeroScopeState extends State<LocalHeroScope>
 
   @override
   LocalHeroController track(BuildContext context, LocalHero localHero) {
-    final _LocalHeroTracker tracker = trackers.putIfAbsent(
-      localHero.tag,
-      () => createTracker(context, localHero),
-    );
+    _LocalHeroTracker? tracker = trackers[localHero.tag];
+    if (tracker == null) {
+      tracker = createTracker(context, localHero);
+      trackers[localHero.tag] = tracker;
+    } else {
+      updateTracker(context, localHero, tracker);
+    }
     tracker.count++;
     return tracker.controller;
   }
@@ -68,25 +71,64 @@ class _LocalHeroScopeState extends State<LocalHeroScope>
           context,
           controller.view,
           localHero.child,
+          ShuttleType.from
         ) ??
         localHero.child;
 
-    final OverlayEntry overlayEntry = OverlayEntry(
-      builder: (context) {
-        return LocalHeroFollower(
-          controller: controller,
-          child: shuttle,
-        );
-      },
-    );
+    final OverlayEntry overlayEntry = OverlayEntry(builder: (context) {
+      return LocalHeroFollower(
+        controller: controller,
+        from: shuttle,
+        fromUsesFlightShuttleBuilder: localHero.flightShuttleBuilder != null,
+        toUsesFlightShuttleBuilder: false,
+      );
+    });
 
     final _LocalHeroTracker tracker = _LocalHeroTracker(
       controller: controller,
       overlayEntry: overlayEntry,
+      lastLocalHero: localHero,
     );
 
     tracker.addOverlay(context);
     return tracker;
+  }
+
+  void updateTracker(BuildContext context, LocalHero localHero, _LocalHeroTracker tracker) {
+    final LocalHero lastLocalHero = tracker.lastLocalHero;
+    final LocalHeroController controller = tracker.controller;
+    final Widget fromShuttle = lastLocalHero.flightShuttleBuilder?.call(
+          context,
+          controller.view,
+          lastLocalHero.child,
+          ShuttleType.from
+        ) ??
+        lastLocalHero.child;
+
+    final Widget toShuttle = localHero.flightShuttleBuilder?.call(
+          context,
+          controller.view,
+          localHero.child,
+          ShuttleType.to
+        ) ??
+        localHero.child;
+
+    controller.removeListeners();
+
+    final OverlayEntry overlayEntry = OverlayEntry(builder: (context) {
+      return LocalHeroFollower(
+        controller: controller,
+        from: fromShuttle,
+        to: toShuttle,
+        fromUsesFlightShuttleBuilder: lastLocalHero.flightShuttleBuilder != null,
+        toUsesFlightShuttleBuilder: localHero.flightShuttleBuilder != null,
+      );
+    });
+
+    tracker.removeOverlay();
+    tracker.overlayEntry = overlayEntry;
+    tracker.addOverlay(context);
+    tracker.lastLocalHero = localHero;
   }
 
   @override
@@ -131,21 +173,27 @@ class _LocalHeroTracker {
   _LocalHeroTracker({
     required this.overlayEntry,
     required this.controller,
-  });
+    required this.lastLocalHero,
+  }) {
+    controller.animationStatusStream.listen(_onAnimationStatusChange);
+  }
 
-  final OverlayEntry overlayEntry;
+  OverlayEntry overlayEntry;
+  OverlayState? overlayState;
   final LocalHeroController controller;
+  LocalHero lastLocalHero;
   int count = 0;
 
   bool _removeRequested = false;
   bool _overlayInserted = false;
 
   void addOverlay(BuildContext context) {
-    final OverlayState? overlayState = Overlay.of(context);
+    overlayState = Overlay.of(context);
+    _removeRequested = false;
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!_removeRequested) {
-        overlayState!.insert(overlayEntry);
+        overlayState?.insert(overlayEntry);
         _overlayInserted = true;
       }
     });
@@ -155,6 +203,29 @@ class _LocalHeroTracker {
     _removeRequested = true;
     if (_overlayInserted) {
       overlayEntry.remove();
+      _overlayInserted = false;
+    }
+  }
+
+  void _onAnimationStatusChange(AnimationStatus status) {
+    // On completion, we place a copy of the final child widget into the overlay,
+    // otherwise if we animate agin we get a one frame flash where there is nothing
+    // in the overlay, and the widget has been removed.
+    if (status == AnimationStatus.completed) {
+      removeOverlay();
+      final OverlayEntry childEntry = OverlayEntry(builder: (context) {
+        return LocalHeroFollower(
+          controller: controller,
+          from: lastLocalHero.child,
+          fromUsesFlightShuttleBuilder: false,
+          toUsesFlightShuttleBuilder: false,
+        );
+      });
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        overlayEntry = childEntry;
+        overlayState?.insert(childEntry);
+        _overlayInserted = true;
+      });
     }
   }
 }
